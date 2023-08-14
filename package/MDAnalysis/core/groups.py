@@ -3451,6 +3451,22 @@ class AtomGroup(GroupBase):
 
     convert_to = Accessor("convert_to", ConverterWrapper)
 
+    def write_modified(self, filename=None, frames=None):
+
+        # check that AtomGroup actually has any atoms (Issue #434)
+        if len(self.atoms) == 0:
+            raise IndexError("Cannot write an AtomGroup with 0 atoms")
+
+        try:
+            writer = get_writer_for(
+                filename, format=None, multiframe=None)
+        except (ValueError, TypeError):
+            pass
+
+        with writer(filename, n_atoms=self.n_atoms) as w:
+            if frames is None:
+                w.write(self.atoms)
+
     def write(self, filename=None, file_format=None,
               filenamefmt="{trjname}_{frame}", frames=None, **kwargs):
         """Write `AtomGroup` to a file.

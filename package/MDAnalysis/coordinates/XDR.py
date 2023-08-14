@@ -63,7 +63,8 @@ def offsets_filename(filename, ending='npz'):
 
     """
     head, tail = split(filename)
-    return join(head, f'.{tail}_offsets.{ending}')
+    return join(head, '.{tail}_offsets.{ending}'.format(tail=tail,
+                                                        ending=ending))
 
 
 def read_numpy_offsets(filename):
@@ -87,7 +88,7 @@ def read_numpy_offsets(filename):
 
     #  `ValueError` is encountered when the offset file is corrupted.
     except (ValueError, IOError):
-        warnings.warn(f"Failed to load offsets file {filename}\n")
+        warnings.warn("Failed to load offsets file {}\n".format(filename))
         return False
 
 class XDRBaseReader(base.ReaderBase):
@@ -200,7 +201,7 @@ class XDRBaseReader(base.ReaderBase):
         except OSError as e:
             if isinstance(e, PermissionError) or e.errno == errno.EROFS:
                 warnings.warn(f"Cannot write lock/offset file in same location as "
-                              f"{self.filename}. Using slow offset calculation.")
+                               "{self.filename}. Using slow offset calculation.")
                 self._read_offsets(store=True)
                 return
             else:
@@ -219,10 +220,10 @@ class XDRBaseReader(base.ReaderBase):
             # refer to Issue #1893
             data = read_numpy_offsets(fname)
             if not data:
-                warnings.warn(f"Reading offsets from {fname} failed, "
+                warnings.warn("Reading offsets from {} failed, "
                               "reading offsets from trajectory instead.\n"
                               "Consider setting 'refresh_offsets=True' "
-                              "when loading your Universe.")
+                              "when loading your Universe.".format(fname))
                 self._read_offsets(store=True)
                 return
 
@@ -255,7 +256,7 @@ class XDRBaseReader(base.ReaderBase):
                          offsets=offsets, size=size, ctime=ctime,
                          n_atoms=self._xdr.n_atoms)
             except Exception as e:
-                warnings.warn(f"Couldn't save offsets because: {e}")
+                warnings.warn("Couldn't save offsets because: {}".format(e))
 
     @property
     def n_frames(self):

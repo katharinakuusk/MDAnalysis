@@ -51,21 +51,9 @@ Classes
 
 """
 import numpy as np
-try:
-    import gsd
-    import gsd.fl
-except ImportError:
-    HAS_GSD = False
-    import types
-
-    class MockHOOMDTrajectory:
-        pass
-
-    gsd = types.ModuleType("gsd")
-    gsd.hoomd = types.ModuleType("hoomd")
-    gsd.hoomd.HOOMDTrajectory = MockHOOMDTrajectory
-else:
-    HAS_GSD = True
+import gsd
+import gsd.fl
+import gsd.hoomd
 
 from . import base
 from MDAnalysis.lib.util import store_init_arguments
@@ -93,14 +81,8 @@ class GSDReader(base.ReaderBase):
         .. versionchanged:: 2.0.0
             Now use a picklable :class:`gsd.hoomd.HOOMDTrajectory`--
             :class:`GSDPicklable`
-        .. versionchanged:: 2.6.0
-           Support for GSD versions below 3.0.1 have been dropped. This
-           includes support for schema 1.3.
-        """
-        if not HAS_GSD:
-            errmsg = "GSDReader: To read GSD files, please install gsd"
-            raise ImportError(errmsg)
 
+        """
         super(GSDReader, self).__init__(filename, **kwargs)
         self.filename = filename
         self.open_trajectory()
@@ -111,7 +93,7 @@ class GSDReader(base.ReaderBase):
     def open_trajectory(self):
         """opens the trajectory file using gsd.hoomd module"""
         self._frame = -1
-        self._file = gsd_pickle_open(self.filename, mode='r')
+        self._file = gsd_pickle_open(self.filename, mode='rb')
 
     def close(self):
         """close reader"""
@@ -188,8 +170,8 @@ class GSDPicklable(gsd.hoomd.HOOMDTrajectory):
     ::
 
         gsdfileobj = gsd.fl.open(name=filename,
-                                     mode='r',
-                                     application='gsd.hoomd '+ gsd.version.version,
+                                     mode='rb',
+                                     application='gsd.hoomd '+gsd.__version__,
                                      schema='hoomd',
                                      schema_version=[1, 3])
         file = GSDPicklable(gsdfileobj)
@@ -210,8 +192,8 @@ class GSDPicklable(gsd.hoomd.HOOMDTrajectory):
         return self.file.name, self.file.mode
 
     def __setstate__(self, args):
-        gsd_version = gsd.version.version
-        schema_version = [1, 4]
+        gsd_version = gsd.__version__
+        schema_version = [1, 4] if gsd_version >= '1.9.0' else [1, 3]
         gsdfileobj = gsd.fl.open(name=args[0],
                                  mode=args[1],
                                  application='gsd.hoomd ' + gsd_version,
@@ -220,7 +202,7 @@ class GSDPicklable(gsd.hoomd.HOOMDTrajectory):
         self.__init__(gsdfileobj)
 
 
-def gsd_pickle_open(name: str, mode: str='r'):
+def gsd_pickle_open(name, mode='rb'):
     """Open hoomd schema GSD file with pickle function implemented.
 
     This function returns a GSDPicklable object. It can be used as a
@@ -237,8 +219,8 @@ def gsd_pickle_open(name: str, mode: str='r'):
     ----------
     name : str
         a filename given a text or byte string.
-    mode: str, optional
-        'r':  open for reading.
+    mode: {'r', 'rb'} (optional)
+        'r', 'rb':  open for reading;
 
     Returns
     -------
@@ -272,14 +254,11 @@ def gsd_pickle_open(name: str, mode: str='r'):
 
 
     .. versionadded:: 2.0.0
-    .. versionchanged:: 2.6.0
-       Only GSD versions 3.0.1+ are supported. 'rb' mode support
-       has been replaced with 'r' mode.
     """
-    gsd_version = gsd.version.version
-    schema_version = [1, 4]
-    if mode != 'r':
-        raise ValueError("Only read mode 'r' "
+    gsd_version = gsd.__version__
+    schema_version = [1, 4] if gsd_version >= '1.9.0' else [1, 3]
+    if mode not in {'r', 'rb'}:
+        raise ValueError("Only read mode ('r', 'rb') "
                          "files can be pickled.")
     gsdfileobj = gsd.fl.open(name=name,
                              mode=mode,

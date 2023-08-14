@@ -148,6 +148,7 @@ import textwrap
 import warnings
 import logging
 import collections
+import copy
 import numpy as np
 
 from ..lib import util
@@ -508,6 +509,7 @@ class PDBWriter(base.WriterBase):
     .. _NUMMDL: http://www.wwpdb.org/documentation/file-format-content/format33/sect2.html#NUMMDL
     .. _REMARKS: http://www.wwpdb.org/documentation/file-format-content/format33/remarks.html
     .. _TITLE: http://www.wwpdb.org/documentation/file-format-content/format33/sect2.html#TITLE
+    .. _TER: https://www.wwpdb.org/documentation/file-format-content/format33/sect9.html#TER
 
     Note
     ----
@@ -589,8 +591,13 @@ class PDBWriter(base.WriterBase):
         'TITLE': "TITLE     {0}\n",
         'MODEL': "MODEL     {0:>4d}\n",
         'NUMMDL': "NUMMDL    {0:5d}\n",
+        'TER': ("TER   {serial:5d}      {resName:<4s}"
+                "{chainID:1s}{resSeq:4d}{iCode:1s}\n"),
         'ENDMDL': "ENDMDL\n",
         'END': "END\n",
+        # added TER here to the dict
+        'TER': ("TER   {serial:5d}      {resName:<4s}"
+                "{chainID:1s}{resSeq:4d}{iCode:1s}\n"),
         'CRYST1': ("CRYST1{box[0]:9.3f}{box[1]:9.3f}{box[2]:9.3f}"
                    "{ang[0]:7.2f}{ang[1]:7.2f}{ang[2]:7.2f} "
                    "{spacegroup:<11s}{zvalue:4d}\n"),
@@ -1171,6 +1178,7 @@ class PDBWriter(base.WriterBase):
             chainids - np array of chainIDs
             default - default value in case chainID is considered invalid
             """
+
             invalid_length_ids = False
             invalid_char_ids = False
             missing_ids = False
@@ -1200,7 +1208,9 @@ class PDBWriter(base.WriterBase):
                               "".format(default))
             return chainids
 
-        chainids = validate_chainids(chainids, "X")
+            # I changed it here from "X" to ""
+            chainids = validate_chainids(chainids, "X")
+            # chainids = validate_chainids(chainids, "")
 
         # If reindex == False, we use the atom ids for the serial. We do not
         # want to use a fallback here.
@@ -1214,6 +1224,9 @@ class PDBWriter(base.WriterBase):
                 )
         else:
             atom_ids = np.arange(len(atoms)) + 1
+
+        prev_atom = {}
+        serial_count = 0
 
         for i, atom in enumerate(atoms):
             vals = {}
@@ -1231,6 +1244,25 @@ class PDBWriter(base.WriterBase):
             vals['element'] = elements[i][:2].upper()
             vals['charge'] = formal_charges[i]
 
+            if (i != 0 and vals['chainID'] != prev_atom['chainID']
+                and vals['chainID'] != " " and prev_atom != " "):
+
+                end_atom = {}
+                print(str(prev_atom["resName"]) + str(prev_atom['serial']))
+                print(str(vals["resName"]) + str(vals['serial']))
+                end_atom['serial'] = int(str(prev_atom['serial']+1)[-5:])
+                print(end_atom['serial'])
+                end_atom['resName'] = prev_atom['resName']
+                end_atom['chainID'] = prev_atom['chainID']
+                end_atom['resSeq'] = prev_atom['resSeq']
+                end_atom['iCode'] = prev_atom['iCode']
+                self.TER(end_atom)
+                vals['serial'] = int(str(serial_count+1)[-5:])
+                print(vals["serial"])
+
+            prev_atom = copy.deepcopy(vals)
+            serial_count += 1
+
             # record_type attribute, if exists, can be ATOM or HETATM
             try:
                 self.pdbfile.write(self.fmt[record_types[i]].format(**vals))
@@ -1238,6 +1270,15 @@ class PDBWriter(base.WriterBase):
                 errmsg = (f"Found {record_types[i]} for the record type, but "
                           f"only allowed types are ATOM or HETATM")
                 raise ValueError(errmsg) from None
+
+        ter_atom = {}
+        ter_atom['serial'] = int(str(prev_atom['serial'] + 1)[-5:])
+        # check for overflow here?
+        ter_atom['resName'] = prev_atom['resName']
+        ter_atom['chainID'] = prev_atom['chainID']
+        ter_atom['resSeq'] = prev_atom['resSeq']
+        ter_atom['iCode'] = prev_atom['iCode']
+        self.TER(ter_atom)
 
         if multiframe:
             self.ENDMDL()
@@ -1316,6 +1357,12 @@ class PDBWriter(base.WriterBase):
             # only write a single END record
             self.pdbfile.write(self.fmt['END'])
         self.has_END = True
+
+    def TER(self, tatom):
+        """Write the TER_ record.
+        .. _TER: http://www.wwpdb.org/documentation/file-format-content/format33/sect9.html#TER
+        """
+        self.pdbfile.write(self.fmt['TER'].format(**tatom))
 
     def ENDMDL(self):
         """Write the ENDMDL_ record.
